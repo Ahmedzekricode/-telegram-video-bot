@@ -13,17 +13,20 @@ def start(message):
     if message.chat.type != "private":
         return
     markup = types.InlineKeyboardMarkup()
-    share = types.InlineKeyboardButton("📲 شارك البوت", url="https://t.me/HamlhaBot")
-    markup.add(share)
-    bot.send_message(message.chat.id, "👋 مرحبًا! أرسل رابط فيديو من YouTube أو TikTok أو Instagram.", reply_markup=markup)
+    btn = types.InlineKeyboardButton("📲 شارك البوت", url="https://t.me/HamlhaBot")
+    markup.add(btn)
+    bot.send_message(message.chat.id, "👋 أرسل رابط فيديو من YouTube أو TikTok فقط.", reply_markup=markup)
 
 @bot.message_handler(func=lambda msg: True)
 def handle_link(msg):
     if msg.chat.type != "private":
         return
-    url = msg.text.strip()
+    url = msg.text.strip().split('?')[0]
+    if "instagram.com" in url:
+        bot.send_message(msg.chat.id, "⚠️ روابط Instagram غير مدعومة حالياً.")
+        return
     if url in used_links.get(msg.chat.id, []):
-        bot.send_message(msg.chat.id, "🔁 هذا الرابط سبق وأن استُعمل.")
+        bot.send_message(msg.chat.id, "🔁 هذا الرابط استُعمل من قبل.")
         return
     user_links[msg.chat.id] = url
     markup = types.InlineKeyboardMarkup()
@@ -40,13 +43,13 @@ def handle_link(msg):
             else:
                 bot.send_message(msg.chat.id, f"🎥 {title}\n\n✅ اختر نوع التحميل:", reply_markup=markup)
     except:
-        bot.send_message(msg.chat.id, "❌ تعذر قراءة الرابط.")
+        bot.send_message(msg.chat.id, "❌ تعذر قراءة الرابط. تأكد أنه صالح.")
 
 @bot.callback_query_handler(func=lambda call: True)
 def process_download(call):
     url = user_links.get(call.message.chat.id)
     if not url:
-        bot.send_message(call.message.chat.id, "❗ لا يوجد رابط محفوظ.")
+        bot.send_message(call.message.chat.id, "❗ لا يوجد رابط.")
         return
     choice = call.data
     bot.send_message(call.message.chat.id, "⏳ جاري التحميل...")
@@ -76,10 +79,10 @@ def process_download(call):
                         else:
                             bot.send_audio(call.message.chat.id, f)
                 else:
-                    bot.send_message(call.message.chat.id, "⚠️ الملف كبير ولا يمكن إرساله.")
+                    bot.send_message(call.message.chat.id, "⚠️ الملف كبير.")
                 os.remove(path)
         used_links.setdefault(call.message.chat.id, []).append(url)
-    except Exception as e:
-        bot.send_message(call.message.chat.id, "❌ حدث خطأ أثناء التحميل.")
+    except:
+        bot.send_message(call.message.chat.id, "❌ فشل التحميل.")
 
 bot.polling()
