@@ -2,7 +2,7 @@ import os
 import asyncio
 from yt_dlp import YoutubeDL
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTy
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = "7741018335:AAFxSfAo_bF5dQ4gNLZod93J_powb44Tpus"
 
