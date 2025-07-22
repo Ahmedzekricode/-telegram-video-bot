@@ -1,59 +1,58 @@
 import os
 import asyncio
-from yt_dlp import YoutubeDL
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import yt_dlp
+from pyrogram import Client, filters
+from pyrogram.types import Message
+import tempfile
 
-TOKEN = "7741018335:AAFxSfAo_bF5dQ4gNLZod93J_powb44Tpus"
 
-ydl_opts = {
-    'format': 'best',
-    'outtmpl': '%(title)s.%(ext)s',
-    'noplaylist': True,
-    'quiet': True,
-}
+api_id = os.getenv("API_ID")
+api_hash = os.getenv("API_HASH")
+bot_token = os.getenv("BOT_TOKEN")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 أهلاً بك!\n\n📥 أرسل رابط فيديو من YouTube أو TikTok أو Instagram وسأقوم بتحميله لك ✅"
-    )
+app = Client(
+    "telegram-video-bot",
+    api_id=api_id,
+    api_hash=api_hash,
+    bot_token=bot_token
+)
 
-async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text.strip()
-
-    if not (url.startswith("http://") or url.startswith("https://")):
-        await update.message.reply_text("⚠️ الرجاء إرسال رابط صحيح!")
-        return
-
-    msg = await update.message.reply_text("⏳ جاري التحميل... انتظر قليلاً")
-
+async def download_video_and_send(url: str, message: Message):
+    download_message = await message.reply_text("جاري التحميل...")
     try:
-        
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'progress_hooks': [lambda d: print(d['status'])] 
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filepath = ydl.prepare_filename(info)
 
-        file_size = os.path.getsize(filename)
-
-        
-        if file_size > 49 * 1024 * 1024:  
-            await msg.edit_text(f"📹 تم التحميل!\nلكن الفيديو أكبر من 50MB\nعنوان الفيديو: {info['title']}\nرابط مباشر: {info['webpage_url']}")
-        else:
-            await update.message.reply_video(video=open(filename, 'rb'), caption=f"✅ {info['title']}")
-
-        os.remove(filename)
+            file_size = os.path.getsize(filepath)
+            
+            if file_size > 50 * 1024 * 1024:  
+                await download_message.edit_text("الملف كبير جداً، لا يمكن رفعه مباشرة، سيتم إرسال رابط.")
+                caption = f"🔗 رابط الفيديو: [{info.get('title', 'الفيديو')}]({info['webpage_url']})"
+                await message.reply_text(caption, disable_web_page_preview=False)
+            else:
+                caption = f"🎬 {info.get('title', 'الفيديو')} بواسطة AhmedZikoCode"
+                await message.reply_video(filepath, caption=caption)
+                await download_message.delete()
 
     except Exception as e:
-        await msg.edit_text(f"❌ حدث خطأ: {e}")
+        await download_message.edit_text(f"حدث خطأ: {e}")
 
-def main():
-    app = Application.builder().token(TOKEN).build()
+@app.on_message(filters.command("start"))
+async def start_command(client: Client, message: Message):
+    await message.reply_text("أهلاً بك! أرسل لي رابط فيديو من YouTube أو TikTok أو Instagram وسأقوم بتحميله لك.")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
-
-    print("🚀 البوت يعمل الآن...")
-    app.run_polling()
+@app.on_message(filters.regex(r"(https?://)?(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|x\.com)/[^\s]+"))
+async def video_link_handler(client: Client, message: Message):
+    url = message.text
+    await download_video_and_send(url, message)
 
 if __name__ == "__main__":
-    main()
+    app.run()
